@@ -12,6 +12,7 @@ code Main
   function main ()
        InitializeScheduler ()
        DiningPhilosophers ()
+       ThreadFinish ()
 
 --      FatalError ("Need to implement")
     endFunction
@@ -130,14 +131,13 @@ code Main
     method PickupForks (p: int)
       -- This method is called when philosopher 'p' wants to eat.
       lock.Lock ()
-      if self.CheckFork (p)
+      status[p] = HUNGRY
+      self.PrintAllStatus ()
+      while !self.CheckFork (p)
+	cond.Wait (&lock)
+      endWhile
 	status[p] = EATING
 	self.PrintAllStatus ()
-      else
-	status[p] = HUNGRY
-	self.PrintAllStatus ()
-	cond.Wait (&lock)
-      endIf
       lock.Unlock ()
       endMethod
 
@@ -145,8 +145,8 @@ code Main
       -- This method is called when the philosopher 'p' is done eating.
       lock.Lock ()
       status[p] = THINKING
-      cond.Broadcast (&lock)
       self.PrintAllStatus ()
+      cond.Broadcast (&lock)
       lock.Unlock ()
       endMethod
 
