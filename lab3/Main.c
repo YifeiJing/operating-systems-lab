@@ -15,9 +15,14 @@ code Main
      --  ThreadFinish ()
 
 -- Uncomment this section to test sleeping barber --
-	 InitializeScheduler ()
-	 SleepingBarber ()
-	 ThreadFinish ()
+	-- InitializeScheduler ()
+	-- SleepingBarber ()
+	-- ThreadFinish ()
+
+-- Uncomment this section to test GamingParlor problem --
+	InitializeScheduler ()
+	GamingParlor ()
+	ThreadFinish ()
 
 --      FatalError ("Need to implement")
     endFunction
@@ -340,6 +345,129 @@ var
 	   endSwitch
 	endFor
 	nl ()
+endFunction
+
+---------------------- Gaming Parlor ------------------------------
+-- There are 8 groups, named A through H. Each group dose the fllowing:
+-- 	for i = 1 to 5
+--	  obtain dice
+--	  ...play game (no actual work)...
+--	  return dice
+--	endFor
+--
+-- Each group needs a different number of dice.
+--	Group A needs 4 dice.
+--	Group B needs 4 dice.
+--	Group C needs 5 dice.
+--	Group D needs 5 dice.
+--	Group E needs 2 dice.
+--	Group F needs 2 dice.
+--	Group G needs 1 dice.
+--	Group H needs 1 dice.
+--
+-------------------------------------------------------------
+var
+   mtx: Mutex = new Mutex
+   req1, req2, req4, req5: Condition
+   num: int
+   Group: array [8] of Thread = new array of Thread { 8 of new Thread }
+
+function GamingParlor ()
+    num = 8
+    mtx.Init ()
+    req1 = new Condition
+    req2 = new Condition
+    req4 = new Condition
+    req5 = new Condition
+    req1.Init ()
+    req2.Init ()
+    req4.Init ()
+    req5.Init ()
+
+    Group[0].Init("A")
+    Group[0].Fork(RequestDice, 4)
+    Group[1].Init("B")
+    Group[1].Fork(RequestDice, 4)
+    Group[2].Init("C")
+    Group[2].Fork(RequestDice, 5)
+    Group[3].Init("D")
+    Group[3].Fork(RequestDice, 5)
+    Group[4].Init("E")
+    Group[4].Fork(RequestDice, 2)
+    Group[5].Init("F")
+    Group[5].Fork(RequestDice, 2)
+    Group[6].Init("G")
+    Group[6].Fork(RequestDice, 1)
+    Group[7].Init("H")
+    Group[7].Fork(RequestDice, 1)
+
+endFunction
+
+function RequestDice(n: int)
+-- n: the number of dice
+var i: int
+    for i = 1 to 5
+    	Request (n)
+	Proceeds (n)
+	Release (n)
+    endFor
+endFunction
+
+function Request (n: int)
+    mtx.Lock ()
+    print (currentThread.name)
+    print (" requests ")
+    printInt (n)
+    nl ()
+    NumberOfDice ()
+    while (num - n) < 0
+	switch n
+	   case 1: req1.Wait (&mtx) break
+	   case 2: req2.Wait (&mtx) break
+	   case 4: req4.Wait (&mtx) break
+	   case 5: req5.Wait (&mtx) break
+	endSwitch
+    endWhile
+endFunction
+
+function Proceeds (n: int)
+    print (currentThread.name)
+    print (" proceeds with ")
+    printInt (n)
+    nl ()
+    num = num - n
+    NumberOfDice ()
+    mtx.Unlock ()
+endFunction
+
+function Release (n: int)
+    mtx.Lock ()
+    print (currentThread.name)
+    print (" releases and adds back ")
+    printInt (n)
+    nl ()
+    num = num + n
+    NumberOfDice ()
+    if num >= 1
+	req1.Signal (&mtx)
+    endIf
+    if num >= 2
+	req2.Signal (&mtx)
+    endIf
+    if num >= 4
+	req4.Signal (&mtx)
+    endIf
+    if num >= 5
+	req5.Signal (&mtx)
+    endIf
+    mtx.Unlock ()
+endFunction
+
+function NumberOfDice ()
+-- Assume interupt is disabled in this function
+    print ("----------------------------Number of dice now avail = ")
+    printInt (num)
+    nl ()
 endFunction
 
 endCode
