@@ -10,9 +10,14 @@ code Main
 -----------------------------  Main  ---------------------------------
 
   function main ()
-       InitializeScheduler ()
-       DiningPhilosophers ()
-       ThreadFinish ()
+     --  InitializeScheduler ()
+     --  DiningPhilosophers ()
+     --  ThreadFinish ()
+
+-- Uncomment this section to test sleeping barber --
+	 InitializeScheduler ()
+	 SleepingBarber ()
+	 ThreadFinish ()
 
 --      FatalError ("Need to implement")
     endFunction
@@ -188,5 +193,153 @@ code Main
     endMethod
 
   endBehavior
+
+------------------------------- Sleeping barber -------------------------------
+-- Eight status: enter (E)
+--		 sit in chair (S)
+--		 Begin hair cut (B)
+--		 Finish hair cut (F)
+--		 Leave (L)
+--		 Barber starts hair cut (start)
+--		 Barber ends hair cut (end)
+--		 Customers are out of the shop, the null state (OUT)
+-- Five chairs: XXXXX
+-- The sequencce of a correct output: E (S) start S F end L
+
+
+   enum E, S, B, F, L, start, end, OUT
+var
+   customers: array [10] of Thread = new array of Thread { 10 of new Thread }
+   statuss: array [10] of int = new array of int { 10 of OUT }
+   mutex: Mutex = new Mutex
+   barber: Semaphore = new Semaphore
+   seats: int
+
+function SleepingBarber ()
+
+  var 
+   i: int
+      mutex.Init ()
+      barber.Init (1)
+      seats = 5
+
+      print ("       Barber   1  2  3  4  5  6  7  8  9  10\n")
+
+      PrintAllStatus ()
+
+      for i = 0 to 9
+	customers[i].Init ("Customer")
+	customers[i].Fork (CustomerInShop, i)
+      endFor
+      endFunction
+
+function CustomerInShop (c: int)
+  -- Enter the shop and find a seat
+	EnterTheShop (c)
+	 LeaveShop (c)
+      endFunction
+
+function EnterTheShop (c: int)
+    mutex.Lock ()
+    statuss[c] = E
+    PrintAllStatus ()
+    if hasSeats ()
+	seats = seats - 1
+	statuss[c] = S
+	PrintAllStatus ()
+	statuss[c] = OUT
+	mutex.Unlock ()
+	barber.Down ()
+	mutex.Lock ()
+	statuss[c] = start
+	PrintAllStatus ()
+	statuss[c] = B
+	seats = seats + 1
+	PrintAllStatus ()
+	statuss[c] = OUT
+	mutex.Unlock ()
+	currentThread.Yield ()
+	mutex.Lock ()
+	statuss[c] = F
+	PrintAllStatus ()
+	statuss[c] = end
+	PrintAllStatus ()
+	statuss[c] = OUT
+	barber.Up ()
+    endIf
+	mutex.Unlock ()
+endFunction
+
+function LeaveShop (c: int)
+  -- The last step, the customer leave shop and wake up the other custemers waiting on the seats
+     mutex.Lock ()
+     statuss[c] = L
+     PrintAllStatus ()
+     statuss[c] = OUT
+     mutex.Unlock ()
+endFunction
+
+function hasSeats () returns bool
+      return seats > 0
+endFunction
+
+function PrintAllStatus ()
+var 
+   i: int
+   h: bool
+   p: int
+	h = false
+  -- Print seats
+	for i = 1 to 5 - seats
+	   print("X")
+	endFor
+	for i = 1 to seats
+	   print("_")
+	endFor
+  -- indent
+	print("  ")
+  -- barber status
+	for i = 0 to 9
+	   if statuss[i] == start
+		print("start ")
+		h = true
+		break
+	   elseIf statuss[i] == end
+		print("end   ")
+		h = true
+		break
+	   endIf
+	endFor
+	if ! h
+	   print("      ")
+	endIf
+  -- indent
+	print(" ")
+  -- customer status
+	for p = 0 to 9
+	   switch statuss [p]
+		case OUT:
+		   print("   ")
+		   break
+		case E:
+		   print("  E")
+		   break
+		case S:
+		   print("  S")
+		   break
+		case B:
+		   print("  B")
+		   break
+		case F:
+		   print("  F")
+		   break
+		case L:
+		   print("  L")
+		   break
+		default: print("   ")
+	   endSwitch
+	endFor
+	nl ()
+endFunction
 
 endCode
