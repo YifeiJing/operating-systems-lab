@@ -742,6 +742,7 @@ code Kernel
 	  endWhile
 	  tmp = freeList.Remove ()
 	  tmp.status = JUST_CREATED
+	  self.Print ()
 	  threadManagerLock.Unlock ()
 	  return tmp
         endMethod
@@ -756,6 +757,7 @@ code Kernel
 	  threadManagerLock.Lock ()
 	  th.status = UNUSED
 	  freeList.AddToEnd (th)
+	  self.Print ()
 	  aThreadBecomeFree.Signal (&threadManagerLock)
 	  threadManagerLock.Unlock ()
         endMethod
@@ -845,7 +847,19 @@ code Kernel
         -- This method is called once at kernel startup time to initialize
         -- the one and only "processManager" object.  
         --
-        -- NOT IMPLEMENTED
+	var i: int
+	processTable = new array of ProcessControlBlock { MAX_NUMBER_OF_PROCESSES of new ProcessControlBlock }
+	processManagerLock = new Mutex
+	aProcessBecameFree = new Condition
+	processManagerLock.Init ()
+	aProcessBecameFree.Init ()
+	freeList = new List [ProcessControlBlock]
+	aProcessDied = new Condition
+	aProcessDied.Init ()
+	for i = 0 to MAX_NUMBER_OF_PROCESSES - 1
+		processTable[i].Init ()
+		freeList.AddToEnd (&processTable[i])
+	endFor
         endMethod
 
       ----------  ProcessManager . Print  ----------
@@ -900,8 +914,18 @@ code Kernel
         -- This method returns a new ProcessControlBlock; it will wait
         -- until one is available.
         --
-          -- NOT IMPLEMENTED
-          return null
+	var tmp: ptr to ProcessControlBlock
+	processManagerLock.Lock ()
+	self.nextPid = self.nextPid + 1
+	while freeList.IsEmpty ()
+		aProcessBecameFree.Wait (&processManagerLock)
+	endWhile
+	tmp = freeList.Remove ()
+	tmp.status = ACTIVE
+	tmp.pid = self.nextPid
+	self.Print ()
+	processManagerLock.Unlock ()
+	return tmp
         endMethod
 
       ----------  ProcessManager . FreeProcess  ----------
@@ -911,7 +935,12 @@ code Kernel
         -- This method is passed a ptr to a Process;  It moves it
         -- to the FREE list.
         --
-          -- NOT IMPLEMENTED
+	processManagerLock.Lock ()
+	p.status = FREE
+	freeList.AddToEnd (p)
+	aProcessBecameFree.Signal (&processManagerLock)
+	self.Print ()
+	processManagerLock.Unlock ()
         endMethod
 
 
