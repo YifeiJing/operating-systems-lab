@@ -1048,13 +1048,35 @@ code Kernel
       ----------  FrameManager . GetNewFrames  ----------
 
       method GetNewFrames (aPageTable: ptr to AddrSpace, numFramesNeeded: int)
-          -- NOT IMPLEMENTED
+	var i, f, frameAddr: int
+	frameManagerLock.Lock ()
+	while numFramesNeeded > numberFreeFrames
+	      newFramesAvailable.Wait (&frameManagerLock)
+	endWhile
+	for i = 0 to numFramesNeeded - 1
+	      f = framesInUse.FindZeroAndSet ()
+	      frameAddr = PHYSICAL_ADDRESS_OF_FIRST_PAGE_FRAME + (f * PAGE_SIZE)
+	      aPageTable.SetFrameAddr(i, frameAddr)
+	endFor
+	numberFreeFrames = numberFreeFrames - numFramesNeeded
+	aPageTable.numberOfPages = numFramesNeeded
+	frameManagerLock.Unlock ()
         endMethod
 
       ----------  FrameManager . ReturnAllFrames  ----------
 
       method ReturnAllFrames (aPageTable: ptr to AddrSpace)
-          -- NOT IMPLEMENTED
+	var i, frameAddr, bitNumber: int
+	frameManagerLock.Lock ()
+	for i = 0 to aPageTable.numberOfPages - 1
+	   frameAddr = aPageTable.ExtractFrameAddr (i)
+	   bitNumber = (frameAddr - PHYSICAL_ADDRESS_OF_FIRST_PAGE_FRAME) / PAGE_SIZE
+	   framesInUse.ClearBit (bitNumber)
+	endFor
+	numberFreeFrames = numberFreeFrames + aPageTable.numberOfPages
+	aPageTable.numberOfPages = 0
+	newFramesAvailable.Broadcast (&frameManagerLock)
+	frameManagerLock.Unlock ()
         endMethod
 
     endBehavior
