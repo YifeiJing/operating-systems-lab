@@ -410,7 +410,8 @@ code Kernel
           t = waitingThreads.Remove ()
           if t
             t.status = READY
-            readyList.AddToEnd (t)
+            readyList.AddToEnd (t) -- MESA semantic
+	    -- readyList.AddToFirst (t) -- Hoare Semantic
           endIf
           oldIntStat = SetInterruptsTo (oldIntStat)
         endMethod
