@@ -924,7 +924,7 @@ code Kernel
 	tmp = freeList.Remove ()
 	tmp.status = ACTIVE
 	tmp.pid = self.nextPid
-	self.Print ()
+	--self.Print ()
 	processManagerLock.Unlock ()
 	return tmp
         endMethod
@@ -2611,23 +2611,35 @@ function InitFirstProcess ()
 var myProgram: ptr to Thread
       myProgram = threadManager.GetANewThread ()
       myProgram.name = "myProgram"
-      myProgram.Fork (&StartUserProcess, 0)
+      myProgram.Fork (StartUserProcess, 0)
 endFunction
 
 function StartUserProcess (i: int)
-var pcb: ptr To ProcessControlBlock
+var pcb: ptr to ProcessControlBlock
     fp: ptr to OpenFile
-    pagetable: AddrSpace = new AddrSpace
     initPC: int
-	pagetable.Init ()
+    initUserStackTop: int
+    initSystemStackTop: int
+    junk: int
 	pcb = processManager.GetANewProcess ()
 	pcb.myThread = currentThread
-	currentThread = pcb
+	currentThread.myProcess = pcb
 	fp = fileManager.Open ("TestProgram1")
 	if fp
-	  initPC = fp.LoadExecutable (&pagetable)
+	  initPC = fp.LoadExecutable (&(pcb.addrSpace))
 	  fileManager.Close (fp)
 	  InitUserStackTop ()
+	  initUserStackTop = pcb.addrSpace.numberOfPages * PAGE_SIZE
+	  initSystemStackTop = (&currentThread.systemStack[SYSTEM_STACK_SIZE - 1]) asInteger
+	  junk = SetInterruptsTo (DISABLED)
+	  pcb.addrSpace.SetToThisPageTable ()
+	  currentThread.isUserThread = true
+	  BecomeUserThread (initUserStackTop, initPC, initSystemStackTop)
+	else
+	  FatalError ("Failed to load executable")
 	endIf
+endFunction
+
+function InitUserStackTop ()
 endFunction
 endCode
