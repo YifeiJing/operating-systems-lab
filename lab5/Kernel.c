@@ -1663,81 +1663,160 @@ code Kernel
 -----------------------------  Handle_Sys_Exit  ---------------------------------
 
   function Handle_Sys_Exit (returnStatus: int)
-      -- NOT IMPLEMENTED
+	print ("Call System Exit")
+	nl ()
+	print ("ReturnStatus: ")
+	printInt (returnStatus)
     endFunction
 
 -----------------------------  Handle_Sys_Shutdown  ---------------------------------
 
   function Handle_Sys_Shutdown ()
-      -- NOT IMPLEMENTED
+	print ("Invoke System call Shutdown")
     endFunction
 
 -----------------------------  Handle_Sys_Yield  ---------------------------------
 
   function Handle_Sys_Yield ()
-      -- NOT IMPLEMENTED
+	print ("Invoke System call Yield")
     endFunction
 
 -----------------------------  Handle_Sys_Fork  ---------------------------------
 
   function Handle_Sys_Fork () returns int
-      -- NOT IMPLEMENTED
-      return 0
+	print ("Invoke System call Fork")
+      return 1000
     endFunction
 
 -----------------------------  Handle_Sys_Join  ---------------------------------
 
   function Handle_Sys_Join (processID: int) returns int
-      -- NOT IMPLEMENTED
-      return 0
+	print ("Invoke System call Join")
+      return 2000
     endFunction
 
 -----------------------------  Handle_Sys_Exec  ---------------------------------
 
   function Handle_Sys_Exec (filename: ptr to array of char) returns int
-      -- NOT IMPLEMENTED
-      return 0
+    	var fp: ptr to OpenFile
+    	    initPC: int
+    	    initUserStackTop: int
+    	    initSystemStackTop: int
+    	    junk: int
+	    kernelFileName: array [MAX_STRING_SIZE] of char
+	    newAddrSpace: AddrSpace = new AddrSpace
+	    tmp: int
+	junk = SetInterruptsTo (DISABLED)
+	print ("Invoke System call Execute")
+	tmp = currentThread.myProcess.addrSpace.GetStringFromVirtual (&kernelFileName, filename asInteger, MAX_STRING_SIZE)
+	if tmp < 0
+	   print ("Failed to get string from virtual space")
+	   return -1
+	endIf	
+	fp = fileManager.Open (&kernelFileName)
+	if fp
+	  newAddrSpace.Init ()
+	  initPC = fp.LoadExecutable (&newAddrSpace)
+	  fileManager.Close (fp)
+	  frameManager.ReturnAllFrames (&(currentThread.myProcess.addrSpace))
+	  currentThread.myProcess.addrSpace = newAddrSpace
+	  initUserStackTop = newAddrSpace.numberOfPages * PAGE_SIZE
+	  initSystemStackTop = (&currentThread.systemStack[SYSTEM_STACK_SIZE - 1]) asInteger
+	  newAddrSpace.SetToThisPageTable ()
+	  currentThread.isUserThread = true
+	  BecomeUserThread (initUserStackTop, initPC, initSystemStackTop)
+	else
+	  print ("Failed to open file: ")
+	  print (&kernelFileName)
+	  nl ()
+	endIf
+
+      return 3000
     endFunction
 
 -----------------------------  Handle_Sys_Create  ---------------------------------
 
   function Handle_Sys_Create (filename: ptr to array of char) returns int
-      -- NOT IMPLEMENTED
-      return 0
+	var kernelFileName: array [MAX_STRING_SIZE] of char
+	    tmp: int
+	tmp = currentThread.myProcess.addrSpace.GetStringFromVirtual (&kernelFileName, filename asInteger, MAX_STRING_SIZE)
+	print ("Invoke System call Create")
+	nl ()
+	print ("filename: ")
+	print (&kernelFileName)
+	nl ()
+      return 4000
     endFunction
 
 -----------------------------  Handle_Sys_Open  ---------------------------------
 
   function Handle_Sys_Open (filename: ptr to array of char) returns int
       -- NOT IMPLEMENTED
-      return 0
+      var kernelFileName: array [MAX_STRING_SIZE] of char
+	    tmp: int
+	tmp = currentThread.myProcess.addrSpace.GetStringFromVirtual (&kernelFileName, filename asInteger, MAX_STRING_SIZE)
+	print ("Invoke System call Open")
+	nl ()
+	print ("filename: ")
+	print (&kernelFileName)
+	nl ()
+	return 5000
     endFunction
 
 -----------------------------  Handle_Sys_Read  ---------------------------------
 
   function Handle_Sys_Read (fileDesc: int, buffer: ptr to char, sizeInBytes: int) returns int
       -- NOT IMPLEMENTED
-      return 0
+     var kernelFileName: array [MAX_STRING_SIZE] of char
+	    tmp: int
+	tmp = currentThread.myProcess.addrSpace.GetStringFromVirtual (&kernelFileName, buffer asInteger, MAX_STRING_SIZE)
+	print ("Invoke System call Read")
+	nl ()
+	print ("buffer: ")
+	print (&kernelFileName)
+	nl ()
+	return 6000
     endFunction
 
 -----------------------------  Handle_Sys_Write  ---------------------------------
 
   function Handle_Sys_Write (fileDesc: int, buffer: ptr to char, sizeInBytes: int) returns int
       -- NOT IMPLEMENTED
-      return 0
+	var kernelFileName: array [MAX_STRING_SIZE] of char
+	    tmp: int
+	tmp = currentThread.myProcess.addrSpace.GetStringFromVirtual (&kernelFileName, buffer asInteger, MAX_STRING_SIZE)
+	print ("Invoke System call Write")
+	nl ()
+	print ("buffer: ")
+	print (&kernelFileName)
+	nl ()
+      return 7000
     endFunction
 
 -----------------------------  Handle_Sys_Seek  ---------------------------------
 
   function Handle_Sys_Seek (fileDesc: int, newCurrentPos: int) returns int
       -- NOT IMPLEMENTED
-      return 0
+	print ("Invoke System call Seek")
+	nl ()
+	print ("fileDesc: ")
+	printInt (fileDesc)
+	nl ()
+	print ("newCurrentPos: ")
+	printInt (newCurrentPos)
+	nl ()
+      return 8000
     endFunction
 
 -----------------------------  Handle_Sys_Close  ---------------------------------
 
   function Handle_Sys_Close (fileDesc: int)
       -- NOT IMPLEMENTED
+	print ("Invoke System call Close")
+	nl ()
+	print ("fileDesc: ")
+	printInt (fileDesc)
+	nl ()
     endFunction
 
 -----------------------------  DiskDriver  ---------------------------------
@@ -2621,6 +2700,7 @@ var pcb: ptr to ProcessControlBlock
     initUserStackTop: int
     initSystemStackTop: int
     junk: int
+	junk = SetInterruptsTo (DISABLED)
 	pcb = processManager.GetANewProcess ()
 	pcb.myThread = currentThread
 	currentThread.myProcess = pcb
@@ -2628,18 +2708,16 @@ var pcb: ptr to ProcessControlBlock
 	if fp
 	  initPC = fp.LoadExecutable (&(pcb.addrSpace))
 	  fileManager.Close (fp)
-	  InitUserStackTop ()
 	  initUserStackTop = pcb.addrSpace.numberOfPages * PAGE_SIZE
 	  initSystemStackTop = (&currentThread.systemStack[SYSTEM_STACK_SIZE - 1]) asInteger
-	  junk = SetInterruptsTo (DISABLED)
 	  pcb.addrSpace.SetToThisPageTable ()
 	  currentThread.isUserThread = true
+	  junk = SetInterruptsTo (ENABLED)
 	  BecomeUserThread (initUserStackTop, initPC, initSystemStackTop)
 	else
-	  FatalError ("Failed to load executable")
+	  print ("Failed to open file: TestProgram1")
+	  nl ()
 	endIf
 endFunction
 
-function InitUserStackTop ()
-endFunction
 endCode
