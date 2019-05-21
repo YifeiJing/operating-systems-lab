@@ -245,8 +245,8 @@ header Kernel
       PrintShort ()
       GetANewProcess () returns ptr to ProcessControlBlock
       FreeProcess (p: ptr to ProcessControlBlock)
-      --TurnIntoZombie (p: ptr to ProcessControlBlock)
-      --WaitForZombie (proc: ptr to ProcessControlBlock) returns int
+      TurnIntoZombie (p: ptr to ProcessControlBlock)
+      WaitForZombie (proc: ptr to ProcessControlBlock) returns int
   endClass
 
   -----------------------------  FrameManager  ---------------------------------

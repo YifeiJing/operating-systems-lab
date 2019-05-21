@@ -944,8 +944,67 @@ code Kernel
 	processManagerLock.Unlock ()
         endMethod
 
+	----------- ProcessManager . TurnIntoZombie -----------
+	method TurnIntoZombie (p: ptr to ProcessControlBlock)
+	  var i: int
+	      isZombie: bool = false
 
+	  processManagerLock.Lock ()
+	  for i = 0 to MAX_NUMBER_OF_PROCESSES - 1
+		if p.pid == processManager.processTable[i].parentsPid
+		   processManager.processTable[i].status = FREE
+		   freeList.AddToEnd (&(processManager.processTable[i]))
+		   aProcessBecameFree.Signal (&processManagerLock)
+		elseIf !isZombie && p.parentsPid == processManager.processTable[i].pid && processManager.processTable[i].status == ACTIVE
+		   isZombie = true
+		   p.status = ZOMBIE
+		   aProcessDied.Broadcast (&processManagerLock)
+		endIf
+	  endFor
+	  if !isZombie
+		p.status = FREE
+		freeList.AddToEnd (p)
+		aProcessBecameFree.Signal (&processManagerLock)
+	  endIf
+	  processManagerLock.Unlock ()
+	endMethod
+
+	---------- ProcessManager . WaitForZombie ----------
+
+	method WaitForZombie (proc: ptr to ProcessControlBlock) returns int
+	  var exitStatus: int
+
+	  processManagerLock.Lock ()
+	  while proc.status != ZOMBIE
+		aProcessDied.Wait (&processManagerLock)
+	  endWhile
+	  exitStatus = proc.exitStatus
+	  proc.status = FREE
+	  freeList.AddToEnd (proc)
+	  aProcessBecameFree.Signal (&processManagerLock)
+	  processManagerLock.Unlock ()
+	  return exitStatus
+	endMethod
     endBehavior
+
+--------------------- ProcessFinish ------------------------
+
+function ProcessFinish (exitStatus: int)
+	var junk: int
+	    pcb: ptr to ProcessControlBlock = currentThread.myProcess
+
+	currentThread.myProcess.exitStatus = exitStatus
+	junk = SetInterruptsTo (DISABLED)
+	currentThread.myProcess.myThread = null
+	currentThread.myProcess = null
+	currentThread.isUserThread = false
+	junk = SetInterruptsTo (ENABLED)
+	-- Close any open files
+	frameManager.ReturnAllFrames (&(pcb.addrSpace))
+	processManager.TurnIntoZombie (pcb)
+	ThreadFinish ()
+endFunction
+
 
 -----------------------------  PrintObjectAddr  ---------------------------------
 
@@ -955,17 +1014,6 @@ code Kernel
     --
       printHex (p asInteger)
       printChar (' ')
-    endFunction
-
------------------------------  ProcessFinish  --------------------------
-
-  function ProcessFinish (exitStatus: int)
-    --
-    -- This routine is called when a process is to be terminated.  It will
-    -- free the resources held by this process and will terminate the
-    -- current thread.
-    --
-      FatalError ("ProcessFinish is not implemented")
     endFunction
 
 -----------------------------  FrameManager  ---------------------------------
@@ -1663,10 +1711,7 @@ code Kernel
 -----------------------------  Handle_Sys_Exit  ---------------------------------
 
   function Handle_Sys_Exit (returnStatus: int)
-	print ("Call System Exit")
-	nl ()
-	print ("ReturnStatus: ")
-	printInt (returnStatus)
+ProcessFinish (returnStatus)
     endFunction
 
 -----------------------------  Handle_Sys_Shutdown  ---------------------------------
@@ -1735,8 +1780,17 @@ endFunction
 -----------------------------  Handle_Sys_Join  ---------------------------------
 
   function Handle_Sys_Join (processID: int) returns int
-	print ("Invoke System call Join")
-      return 2000
+	var i: int
+	    childExitStatus: int
+
+	for i = 0 to MAX_NUMBER_OF_PROCESSES - 1
+	    if processManager.processTable[i].pid == processID && processManager.processTable[i].parentsPid == currentThread.myProcess.pid && processManager.processTable[i].status != FREE
+		childExitStatus = processManager.WaitForZombie (&(processManager.processTable[i]))
+		return childExitStatus
+	    endIf
+	endFor
+
+      return -1
     endFunction
 
 -----------------------------  Handle_Sys_Exec  ---------------------------------

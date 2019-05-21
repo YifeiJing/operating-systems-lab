@@ -251,9 +251,9 @@ _Label_5:
 	.import	_CheckVersion_P_List_
 	cmp	r1,0
 	bne	_Label_6
-! Make sure _P_Kernel_ has hash value 0x82d85760 (decimal -2099751072)
+! Make sure _P_Kernel_ has hash value 0x5e5560a2 (decimal 1582653602)
 	set	_packageName,r2
-	set	0x82d85760,r3
+	set	0x5e5560a2,r3
 	call	_CheckVersion_P_Kernel_
 	.import	_CheckVersion_P_Kernel_
 	cmp	r1,0
