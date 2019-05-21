@@ -1688,16 +1688,21 @@ code Kernel
 	    childThread: ptr to Thread
 	    tmp: int
 	    i: int
-	
+	    oldUserPC: int
+	    junk: int
 	childPCB = processManager.GetANewProcess ()
 	childThread = threadManager.GetANewThread ()
 	childPCB.myThread = childThread
 	childPCB.parentsPid = currentThread.myProcess.pid
 	childThread.stackTop = & (childThread.systemStack[SYSTEM_STACK_SIZE - 1])
+	childThread.myProcess = childPCB
+	childThread.status = READY
+	SaveUserRegs (&(childThread.userRegs[0]))
+	junk = SetInterruptsTo (ENABLED)
 	tmp = currentThread.myProcess.addrSpace.numberOfPages
 	if tmp > 0
-	   frameManager.GetNewFrames (childPCB.addrSpace, tmp)
-	   for i = 1 to tmp
+	   frameManager.GetNewFrames (&childPCB.addrSpace, tmp)
+	   for i = 0 to tmp - 1
 		MemoryCopy (childPCB.addrSpace.ExtractFrameAddr (i),
 			    currentThread.myProcess.addrSpace.ExtractFrameAddr (i), PAGE_SIZE)
 		if currentThread.myProcess.addrSpace.IsWritable (i)
@@ -1707,9 +1712,25 @@ code Kernel
 		endIf
 	   endFor
 	endIf
-
-      return 1000
+	oldUserPC = GetOldUserPCFromSystemStack ()
+	childThread.Fork (ResumeChildAfterFork, oldUserPC)
+      return childPCB.pid
     endFunction
+
+function ResumeChildAfterFork (oldUserPC: int)
+	var junk: int
+	    initUserStackTop: int
+	    initSystemStackTop: int
+
+	junk = SetInterruptsTo (DISABLED)
+	currentThread.myProcess.addrSpace.SetToThisPageTable ()
+	RestoreUserRegs (&(currentThread.userRegs[0]))
+	currentThread.isUserThread = true
+	-- Set System Stack top to empty
+	initUserStackTop = currentThread.userRegs[14]
+	initSystemStackTop = (&currentThread.systemStack[SYSTEM_STACK_SIZE - 1]) asInteger
+  	BecomeUserThread (initUserStackTop, oldUserPC,initSystemStackTop)
+endFunction
 
 -----------------------------  Handle_Sys_Join  ---------------------------------
 
