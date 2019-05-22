@@ -27,7 +27,7 @@ code TestProgram3
       --SysExitTest ()
       --BasicForkTest ()
       --YieldTest ()
-      ForkTest ()
+      --ForkTest ()
       --JoinTest1 ()
       --JoinTest2 ()
       --JoinTest3 ()
