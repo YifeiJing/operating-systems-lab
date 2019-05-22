@@ -1723,7 +1723,7 @@ ProcessFinish (returnStatus)
 -----------------------------  Handle_Sys_Yield  ---------------------------------
 
   function Handle_Sys_Yield ()
-	print ("Invoke System call Yield")
+	currentThread.Yield ()
     endFunction
 
 -----------------------------  Handle_Sys_Fork  ---------------------------------
