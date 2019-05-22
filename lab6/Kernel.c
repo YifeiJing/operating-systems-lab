@@ -743,7 +743,7 @@ code Kernel
 	  endWhile
 	  tmp = freeList.Remove ()
 	  tmp.status = JUST_CREATED
-	  self.Print ()
+	  --self.Print ()
 	  threadManagerLock.Unlock ()
 	  return tmp
         endMethod
@@ -758,7 +758,7 @@ code Kernel
 	  threadManagerLock.Lock ()
 	  th.status = UNUSED
 	  freeList.AddToEnd (th)
-	  self.Print ()
+	  --self.Print ()
 	  aThreadBecomeFree.Signal (&threadManagerLock)
 	  threadManagerLock.Unlock ()
         endMethod
@@ -936,6 +936,7 @@ code Kernel
         -- This method is passed a ptr to a Process;  It moves it
         -- to the FREE list.
         --
+	FatalError ("This function should never be invoked!")
 	processManagerLock.Lock ()
 	p.status = FREE
 	freeList.AddToEnd (p)
@@ -951,7 +952,7 @@ code Kernel
 
 	  processManagerLock.Lock ()
 	  for i = 0 to MAX_NUMBER_OF_PROCESSES - 1
-		if p.pid == processManager.processTable[i].parentsPid
+		if p.pid == processManager.processTable[i].parentsPid && processManager.processTable[i].status == ZOMBIE
 		   processManager.processTable[i].status = FREE
 		   freeList.AddToEnd (&(processManager.processTable[i]))
 		   aProcessBecameFree.Signal (&processManagerLock)
@@ -998,7 +999,7 @@ function ProcessFinish (exitStatus: int)
 	currentThread.myProcess.myThread = null
 	currentThread.myProcess = null
 	currentThread.isUserThread = false
-	junk = SetInterruptsTo (ENABLED)
+	junk = SetInterruptsTo (junk)
 	-- Close any open files
 	frameManager.ReturnAllFrames (&(pcb.addrSpace))
 	processManager.TurnIntoZombie (pcb)

@@ -915,9 +915,9 @@ _Label_904:
 ! VARIABLE INITIALIZATION...
 ! CALL STATEMENT...
 !   Call the function
-	mov	28,r13		! source line 28
+	mov	30,r13		! source line 30
 	mov	"\0\0CA",r10
-	call	_function_197_BasicForkTest
+	call	_function_195_ForkTest
 ! CALL STATEMENT...
 !   Prepare Argument: offset=8  value=0  sizeInBytes=4
 	mov	0,r1
