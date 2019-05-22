@@ -1888,13 +1888,109 @@ endFunction
   function Handle_Sys_Read (fileDesc: int, buffer: ptr to char, sizeInBytes: int) returns int
       -- NOT IMPLEMENTED
      var kernelFileName: array [MAX_STRING_SIZE] of char
-	    tmp: int
+	 tmp: int
+	 virtAddr: int
+	 virtPage: int
+	 offset: int
+	 chunkSize: int
+	 nextPosInFile: int
+	 copiedSoFar: int
+	 destAddr: int
+	 readStat: bool
+	 sizeOfFile: int = currentThread.myProcess.fileDescriptor[fileDesc].fcb.sizeOfFileInBytes
+
 	tmp = currentThread.myProcess.addrSpace.GetStringFromVirtual (&kernelFileName, buffer asInteger, MAX_STRING_SIZE)
-	print ("Invoke System call Read")
-	nl ()
-	print ("buffer: ")
-	print (&kernelFileName)
-	nl ()
+	if fileDesc < 0
+	   print ("Invalid File Descriptor")
+	   nl ()
+	   return -1
+	endIf
+	if sizeInBytes < 0
+	   print ("Invalid para: sizeInBytes")
+	   nl ()
+	   return -1
+	endIf
+	virtAddr = buffer asInteger
+	virtPage = virtAddr / PAGE_SIZE
+	offset = virtAddr % PAGE_SIZE
+	copiedSoFar = 0
+	nextPosInFile = 0
+
+	while true
+	  -- Compute the size of the chunk
+	  chunkSize = PAGE_SIZE - offset
+	  if nextPosInFile + chunkSize > sizeOfFile
+	    chunkSize = sizeOfFile - nextPosInFile
+	  endIf
+	  if copiedSoFar + chunkSize > sizeInBytes
+	    chunkSize = sizeInBytes - copiedSoFar
+	  endIf
+	  if chunkSize <= 0
+	    break
+	  endIf
+
+	-- Ckeck for errors
+	if virtAddr < 0 || virtPage >= MAX_PAGES_PER_VIRT_SPACE || !currentThread.myProcess.addrSpace.IsValid (virtPage) || !currentThread.myProcess.addrSpace.IsWritable (virtPage)
+	   print ("Error while reading file")
+	   return -1
+	endIf
+	-- Increment
+	nextPosInFile = nextPosInFile + chunkSize
+	copiedSoFar = copiedSoFar + chunkSize
+	virtPage = virtPage + 1
+	offset = 0
+
+	if copiedSoFar == sizeInBytes
+	  break
+	endIf
+	endWhile
+
+	virtAddr = buffer asInteger
+	virtPage = virtAddr / PAGE_SIZE
+	offset = virtAddr % PAGE_SIZE
+	copiedSoFar = 0
+	nextPosInFile = 0
+
+	while true
+	  -- Compute the size of the chunk
+	  chunkSize = PAGE_SIZE - offset
+	  if nextPosInFile + chunkSize > sizeOfFile
+	    chunkSize = sizeOfFile - nextPosInFile
+	  endIf
+	  if copiedSoFar + chunkSize > sizeInBytes
+	    chunkSize = sizeInBytes - copiedSoFar
+	  endIf
+	  if chunkSize <= 0
+	    break
+	  endIf
+
+	-- Ckeck for errors
+	if virtAddr < 0 || virtPage >= MAX_PAGES_PER_VIRT_SPACE || !currentThread.myProcess.addrSpace.IsValid (virtPage) || !currentThread.myProcess.addrSpace.IsWritable (virtPage)
+	   print ("Error while reading file")
+	   return -1
+	endIf
+
+	-- Do the read
+	currentThread.myProcess.addrSpace.SetDirty (virtPage)
+	currentThread.myProcess.addrSpace.SetReferenced (virtPage)
+	destAddr = currentThread.myProcess.addrSpace.ExtractFrameAddr (virtPage) + offset
+	readStat = fileManager.SynchRead (currentThread.myProcess.fileDescriptor[fileDesc], destAddr, nextPosInFile, chunkSize)
+	if !readStat
+	  print ("SynchRead failed")
+	  return -1
+	endIf
+
+	-- Increment
+	nextPosInFile = nextPosInFile + chunkSize
+	copiedSoFar = copiedSoFar + chunkSize
+	virtPage = virtPage + 1
+	offset = 0
+
+	if copiedSoFar == sizeInBytes
+	  break
+	endIf
+	endWhile
+	
 	return 6000
     endFunction
 
