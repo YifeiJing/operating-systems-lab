@@ -1887,8 +1887,7 @@ endFunction
 
   function Handle_Sys_Read (fileDesc: int, buffer: ptr to char, sizeInBytes: int) returns int
       -- NOT IMPLEMENTED
-     var kernelFileName: array [MAX_STRING_SIZE] of char
-	 tmp: int
+     var 
 	 virtAddr: int
 	 virtPage: int
 	 offset: int
@@ -1897,10 +1896,9 @@ endFunction
 	 copiedSoFar: int
 	 destAddr: int
 	 readStat: bool
-	 sizeOfFile: int = currentThread.myProcess.fileDescriptor[fileDesc].fcb.sizeOfFileInBytes
+	 sizeOfFile: int 
 
-	tmp = currentThread.myProcess.addrSpace.GetStringFromVirtual (&kernelFileName, buffer asInteger, MAX_STRING_SIZE)
-	if fileDesc < 0
+	if fileDesc < 0 || fileDesc > MAX_FILES_PER_PROCESS - 1 || currentThread.myProcess.fileDescriptor[fileDesc] == null
 	   print ("Invalid File Descriptor")
 	   nl ()
 	   return -1
@@ -1910,11 +1908,19 @@ endFunction
 	   nl ()
 	   return -1
 	endIf
+
+	if currentThread.myProcess.fileDescriptor[fileDesc].fcb == null
+	  print ("Invalid file descriptor as file not open")
+	  nl ()
+	  return -1
+	endIf
+
+	sizeOfFile = currentThread.myProcess.fileDescriptor[fileDesc].fcb.sizeOfFileInBytes
 	virtAddr = buffer asInteger
 	virtPage = virtAddr / PAGE_SIZE
 	offset = virtAddr % PAGE_SIZE
 	copiedSoFar = 0
-	nextPosInFile = 0
+	nextPosInFile = currentThread.myProcess.fileDescriptor[fileDesc].currentPos
 
 	while true
 	  -- Compute the size of the chunk
@@ -1930,7 +1936,7 @@ endFunction
 	  endIf
 
 	-- Ckeck for errors
-	if virtAddr < 0 || virtPage >= MAX_PAGES_PER_VIRT_SPACE || !currentThread.myProcess.addrSpace.IsValid (virtPage) || !currentThread.myProcess.addrSpace.IsWritable (virtPage)
+	if virtAddr < 0 || virtPage > currentThread.myProcess.addrSpace.numberOfPages - 1 || !currentThread.myProcess.addrSpace.IsValid (virtPage) || !currentThread.myProcess.addrSpace.IsWritable (virtPage)
 	   print ("Error while reading file")
 	   return -1
 	endIf
@@ -1949,8 +1955,7 @@ endFunction
 	virtPage = virtAddr / PAGE_SIZE
 	offset = virtAddr % PAGE_SIZE
 	copiedSoFar = 0
-	nextPosInFile = 0
-
+	nextPosInFile = currentThread.myProcess.fileDescriptor[fileDesc].currentPos
 	while true
 	  -- Compute the size of the chunk
 	  chunkSize = PAGE_SIZE - offset
@@ -1965,7 +1970,7 @@ endFunction
 	  endIf
 
 	-- Ckeck for errors
-	if virtAddr < 0 || virtPage >= MAX_PAGES_PER_VIRT_SPACE || !currentThread.myProcess.addrSpace.IsValid (virtPage) || !currentThread.myProcess.addrSpace.IsWritable (virtPage)
+	if virtAddr < 0 || virtPage > currentThread.myProcess.addrSpace.numberOfPages - 1 || !currentThread.myProcess.addrSpace.IsValid (virtPage) || !currentThread.myProcess.addrSpace.IsWritable (virtPage)
 	   print ("Error while reading file")
 	   return -1
 	endIf
@@ -1991,48 +1996,177 @@ endFunction
 	endIf
 	endWhile
 	
-	return 6000
+	currentThread.myProcess.fileDescriptor[fileDesc].currentPos = nextPosInFile
+
+	return copiedSoFar
     endFunction
 
 -----------------------------  Handle_Sys_Write  ---------------------------------
 
   function Handle_Sys_Write (fileDesc: int, buffer: ptr to char, sizeInBytes: int) returns int
       -- NOT IMPLEMENTED
-	var kernelFileName: array [MAX_STRING_SIZE] of char
-	    tmp: int
-	tmp = currentThread.myProcess.addrSpace.GetStringFromVirtual (&kernelFileName, buffer asInteger, MAX_STRING_SIZE)
-	print ("Invoke System call Write")
-	nl ()
-	print ("buffer: ")
-	print (&kernelFileName)
-	nl ()
-      return 7000
+	var
+	 virtAddr: int
+	 virtPage: int
+	 offset: int
+	 chunkSize: int
+	 nextPosInFile: int
+	 copiedSoFar: int
+	 destAddr: int
+	 writeStat: bool
+	 sizeOfFile: int
+
+
+	if fileDesc < 0 || fileDesc > MAX_FILES_PER_PROCESS - 1 || currentThread.myProcess.fileDescriptor[fileDesc] == null
+	  print ("Invalid file descriptor")
+	  nl ()
+	  return -1
+	endIf
+	if sizeInBytes < 0
+	  print ("Invalid sizeInBytes")
+	  nl ()
+	  return -1
+	endIf
+	if currentThread.myProcess.fileDescriptor[fileDesc].fcb == null
+	  print ("Invalid file descriptor as file not open")
+	  nl ()
+	  return -1
+	endIf
+
+	sizeOfFile = currentThread.myProcess.fileDescriptor[fileDesc].fcb.sizeOfFileInBytes
+	virtAddr = buffer asInteger
+	virtPage = virtAddr / PAGE_SIZE
+	offset = virtAddr % PAGE_SIZE
+	copiedSoFar = 0
+	nextPosInFile = currentThread.myProcess.fileDescriptor[fileDesc].currentPos
+	while true
+	  -- Compute the size of the chunk
+	  chunkSize = PAGE_SIZE - offset
+	  if nextPosInFile + chunkSize > sizeOfFile
+	    chunkSize = sizeOfFile - nextPosInFile
+	  endIf
+	  if copiedSoFar + chunkSize > sizeInBytes
+	    chunkSize = sizeInBytes - copiedSoFar
+	  endIf
+	  if chunkSize <= 0
+	    break
+	  endIf
+
+	-- Check for errors
+	if virtAddr < 0 || virtPage > currentThread.myProcess.addrSpace.numberOfPages - 1 || !currentThread.myProcess.addrSpace.IsValid (virtPage) || !currentThread.myProcess.addrSpace.IsWritable (virtPage)
+	   print ("Error while reading file")
+	   return -1
+	endIf
+	-- Increment
+	nextPosInFile = nextPosInFile + chunkSize
+	copiedSoFar = copiedSoFar + chunkSize
+	virtPage = virtPage + 1
+	offset = 0
+
+	if copiedSoFar == sizeInBytes
+	  break
+	endIf
+	endWhile
+
+	virtAddr = buffer asInteger
+	virtPage = virtAddr / PAGE_SIZE
+	offset = virtAddr % PAGE_SIZE
+	copiedSoFar = 0
+	nextPosInFile = currentThread.myProcess.fileDescriptor[fileDesc].currentPos
+	while true
+	  -- Compute the size of the chunk
+	  chunkSize = PAGE_SIZE - offset
+	  if nextPosInFile + chunkSize > sizeOfFile
+	    chunkSize = sizeOfFile - nextPosInFile
+	  endIf
+	  if copiedSoFar + chunkSize > sizeInBytes
+	    chunkSize = sizeInBytes - copiedSoFar
+	  endIf
+	  if chunkSize <= 0
+	    break
+	  endIf
+
+	-- Check for errors
+	if virtAddr < 0 || virtPage > currentThread.myProcess.addrSpace.numberOfPages - 1 || !currentThread.myProcess.addrSpace.IsValid (virtPage) || !currentThread.myProcess.addrSpace.IsWritable (virtPage)
+	   print ("Error while reading file")
+	   return -1
+	endIf
+
+	-- Do the write
+	currentThread.myProcess.addrSpace.SetReferenced (virtPage)
+	destAddr = currentThread.myProcess.addrSpace.ExtractFrameAddr (virtPage) + offset
+	writeStat = fileManager.SynchWrite (currentThread.myProcess.fileDescriptor[fileDesc], destAddr, nextPosInFile, chunkSize)
+	if !writeStat
+	  print ("SynchRead failed")
+	  return -1
+	endIf
+
+	-- Increment
+	nextPosInFile = nextPosInFile + chunkSize
+	copiedSoFar = copiedSoFar + chunkSize
+	virtPage = virtPage + 1
+	offset = 0
+
+	if copiedSoFar == sizeInBytes
+	  break
+	endIf
+	endWhile
+	
+	currentThread.myProcess.fileDescriptor[fileDesc].currentPos = nextPosInFile
+
+      return copiedSoFar
     endFunction
 
 -----------------------------  Handle_Sys_Seek  ---------------------------------
 
   function Handle_Sys_Seek (fileDesc: int, newCurrentPos: int) returns int
       -- NOT IMPLEMENTED
-	print ("Invoke System call Seek")
-	nl ()
-	print ("fileDesc: ")
-	printInt (fileDesc)
-	nl ()
-	print ("newCurrentPos: ")
-	printInt (newCurrentPos)
-	nl ()
-      return 8000
+	var fp: ptr to OpenFile
+	    N: int
+
+	fileManager.fileManagerLock.Lock ()
+
+	if fileDesc < 0 ||  fileDesc > MAX_FILES_PER_PROCESS - 1 || currentThread.myProcess.fileDescriptor[fileDesc] == null || currentThread.myProcess.fileDescriptor[fileDesc].fcb == null
+	  print ("Invalid file descriptor")
+	  nl ()
+	  fileManager.fileManagerLock.Unlock ()
+	 return -1
+	endIf
+
+	fp = currentThread.myProcess.fileDescriptor[fileDesc]
+	N = fp.fcb.sizeOfFileInBytes
+	if newCurrentPos == -1
+	  fp.currentPos = N
+	  fileManager.fileManagerLock.Unlock ()
+	  return N
+	elseIf newCurrentPos < -1 || newCurrentPos > N
+	  print ("Invalid newCurrentPos")
+	  nl ()
+	  fileManager.fileManagerLock.Unlock ()
+	  return -1
+	else
+	  fp.currentPos = newCurrentPos
+	  fileManager.fileManagerLock.Unlock ()
+	  return newCurrentPos
+	endIf
     endFunction
 
 -----------------------------  Handle_Sys_Close  ---------------------------------
 
   function Handle_Sys_Close (fileDesc: int)
       -- NOT IMPLEMENTED
-	print ("Invoke System call Close")
-	nl ()
-	print ("fileDesc: ")
-	printInt (fileDesc)
-	nl ()
+	var fp: ptr to OpenFile
+	    N: int
+	if fileDesc < 0 || fileDesc > MAX_FILES_PER_PROCESS - 1 || currentThread.myProcess.fileDescriptor[fileDesc] == null || currentThread.myProcess.fileDescriptor[fileDesc].fcb == null
+	  print ("Invalid file descriptor [From Handle_Sys_CLose]")
+	  nl ()
+	else
+	fp = currentThread.myProcess.fileDescriptor[fileDesc]
+	N = fp.fcb.sizeOfFileInBytes
+
+	fileManager.Close (fp)
+	currentThread.myProcess.fileDescriptor[fileDesc] = null
+	endIf
     endFunction
 
 -----------------------------  DiskDriver  ---------------------------------
@@ -2920,7 +3054,7 @@ var pcb: ptr to ProcessControlBlock
 	pcb = processManager.GetANewProcess ()
 	pcb.myThread = currentThread
 	currentThread.myProcess = pcb
-	fp = fileManager.Open ("TestProgram3")
+	fp = fileManager.Open ("TestProgram4")
 	if fp
 	  initPC = fp.LoadExecutable (&(pcb.addrSpace))
 	  fileManager.Close (fp)

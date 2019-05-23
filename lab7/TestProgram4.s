@@ -21934,6 +21934,11 @@ _Label_1996:
 	mov	"\0\0FU",r10
 ! VARIABLE INITIALIZATION...
 ! CALL STATEMENT...
+!   Call the function
+	mov	36,r13		! source line 36
+	mov	"\0\0CA",r10
+	call	_function_416_WriteTest4
+! CALL STATEMENT...
 !   Prepare Argument: offset=8  value=0  sizeInBytes=4
 	mov	0,r1
 	store	r1,[r15+0]
