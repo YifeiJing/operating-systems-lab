@@ -33,7 +33,7 @@ code TestProgram4
       -- WriteTest1 ()
       -- WriteTest2 ()
       -- WriteTest3 ()
-       WriteTest4 ()
+      -- WriteTest4 ()
       -- WriteTest5 ()
       -- ReadTest3 ()
       -- ReadTest4 ()

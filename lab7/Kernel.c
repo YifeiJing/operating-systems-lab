@@ -992,6 +992,7 @@ code Kernel
 
 function ProcessFinish (exitStatus: int)
 	var junk: int
+	    i : int
 	    pcb: ptr to ProcessControlBlock = currentThread.myProcess
 
 	currentThread.myProcess.exitStatus = exitStatus
@@ -1001,6 +1002,12 @@ function ProcessFinish (exitStatus: int)
 	currentThread.isUserThread = false
 	junk = SetInterruptsTo (junk)
 	-- Close any open files
+	for i = 0 to MAX_FILES_PER_PROCESS - 1
+	   if pcb.fileDescriptor[i] != null
+		fileManager.Close (pcb.fileDescriptor[i])
+		pcb.fileDescriptor[i] = null
+	   endIf
+	endFor
 	frameManager.ReturnAllFrames (&(pcb.addrSpace))
 	processManager.TurnIntoZombie (pcb)
 	ThreadFinish ()
@@ -1744,6 +1751,12 @@ ProcessFinish (returnStatus)
 	childThread.myProcess = childPCB
 	childThread.status = READY
 	SaveUserRegs (&(childThread.userRegs[0]))
+	for i = 0 to MAX_FILES_PER_PROCESS - 1
+	   if currentThread.myProcess.fileDescriptor[i] != null
+		childPCB.fileDescriptor[i] = currentThread.myProcess.fileDescriptor[i]
+		childPCB.fileDescriptor[i].numberOfUsers = childPCB.fileDescriptor[i].numberOfUsers + 1
+	   endIf
+	endFor
 	junk = SetInterruptsTo (ENABLED)
 	tmp = currentThread.myProcess.addrSpace.numberOfPages
 	if tmp > 0
@@ -1806,16 +1819,21 @@ endFunction
 	    newAddrSpace: AddrSpace = new AddrSpace
 	    tmp: int
 	junk = SetInterruptsTo (DISABLED)
-	print ("Invoke System call Execute")
 	tmp = currentThread.myProcess.addrSpace.GetStringFromVirtual (&kernelFileName, filename asInteger, MAX_STRING_SIZE)
 	if tmp < 0
 	   print ("Failed to get string from virtual space")
+	   nl ()
 	   return -1
 	endIf	
 	fp = fileManager.Open (&kernelFileName)
 	if fp
 	  newAddrSpace.Init ()
 	  initPC = fp.LoadExecutable (&newAddrSpace)
+	  if initPC < 0
+	    print ("Not an executable file!")
+	    nl ()
+	    return -1
+	  endIf
 	  fileManager.Close (fp)
 	  frameManager.ReturnAllFrames (&(currentThread.myProcess.addrSpace))
 	  currentThread.myProcess.addrSpace = newAddrSpace
@@ -1828,6 +1846,7 @@ endFunction
 	  print ("Failed to open file: ")
 	  print (&kernelFileName)
 	  nl ()
+	  return -1
 	endIf
 
       return 3000
