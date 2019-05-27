@@ -25,7 +25,7 @@ var bigBuffer: array [9000] of char = new array of char { 9000 of '?' }
       -- EOFTest ()
       -- OpenCloseTerminalTest ()
       -- TerminalErrorTest ()
-      -- Menu ()
+       Menu ()
 
       Sys_Shutdown ()
     endFunction

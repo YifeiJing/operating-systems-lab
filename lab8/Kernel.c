@@ -1896,9 +1896,10 @@ endFunction
 	endFor
 
 	for j = 0 to 7
-	   if terminal[j] == (&kernalFileName)[j]
+	   if terminal[j] == (&kernelFileName)[j]
 		if j == 7
-		  currentThread.myProcess.fileDescriptor[i] = fileManager.serialTerminalFile
+		  currentThread.myProcess.fileDescriptor[i] = &fileManager.serialTerminalFile
+		  return i
 		endIf
 	   else break
 	   endIf
@@ -1928,6 +1929,7 @@ endFunction
 	 destAddr: int
 	 readStat: bool
 	 sizeOfFile: int 
+	 inChar: char
 
 	if fileDesc < 0 || fileDesc > MAX_FILES_PER_PROCESS - 1 || currentThread.myProcess.fileDescriptor[fileDesc] == null
 	   print ("Invalid File Descriptor")
@@ -1939,6 +1941,53 @@ endFunction
 	   nl ()
 	   return -1
 	endIf
+
+	-- Terminal file
+	if currentThread.myProcess.fileDescriptor[fileDesc].kind == TERMINAL
+	virtAddr = buffer asInteger
+	virtPage = virtAddr / PAGE_SIZE
+	offset = virtAddr % PAGE_SIZE
+	copiedSoFar = 0
+	while true
+
+	-- Ckeck for errors
+	if virtAddr < 0 || virtPage > currentThread.myProcess.addrSpace.numberOfPages - 1 || !currentThread.myProcess.addrSpace.IsValid (virtPage) || !currentThread.myProcess.addrSpace.IsWritable (virtPage)
+	   print ("Error while reading file")
+	   return -1
+	endIf
+
+	-- Do the read
+	currentThread.myProcess.addrSpace.SetDirty (virtPage)
+	currentThread.myProcess.addrSpace.SetReferenced (virtPage)
+	destAddr = currentThread.myProcess.addrSpace.ExtractFrameAddr (virtPage) + offset
+	chunkSize = PAGE_SIZE - offset
+	while chunkSize > 0 && sizeInBytes > 0
+	  inChar = serialDriver.GetChar ()
+	  if inChar == '\r'
+	   	inChar = '\n'
+	  endIf
+	  if inChar == 0x04
+		return copiedSoFar
+	  endIf
+	  (*(destAddr asPtrTo char)) = inChar
+	  copiedSoFar = copiedSoFar + 1
+	  if inChar == '\n'
+		return copiedSoFar
+	  endIf
+	  sizeInBytes = sizeInBytes - 1
+	  chunkSize = chunkSize - 1
+	  destAddr = destAddr + 1
+	endWhile
+
+	-- Increment
+	virtPage = virtPage + 1
+	offset = 0
+
+	if sizeInBytes == 0
+	  return copiedSoFar
+	endIf
+	endWhile
+	endIf 
 
 	if currentThread.myProcess.fileDescriptor[fileDesc].fcb == null
 	  print ("Invalid file descriptor as file not open")
@@ -2046,6 +2095,7 @@ endFunction
 	 destAddr: int
 	 writeStat: bool
 	 sizeOfFile: int
+	 outChar: char
 
 
 	if fileDesc < 0 || fileDesc > MAX_FILES_PER_PROCESS - 1 || currentThread.myProcess.fileDescriptor[fileDesc] == null
@@ -2057,6 +2107,48 @@ endFunction
 	  print ("Invalid sizeInBytes")
 	  nl ()
 	  return -1
+	endIf
+
+	-- Terminal file
+	if currentThread.myProcess.fileDescriptor[fileDesc].kind == TERMINAL
+	virtAddr = buffer asInteger
+	virtPage = virtAddr / PAGE_SIZE
+	offset = virtAddr % PAGE_SIZE
+	copiedSoFar = 0
+	while true
+	-- Check for errors
+	if virtAddr < 0 || virtPage > currentThread.myProcess.addrSpace.numberOfPages - 1 || !currentThread.myProcess.addrSpace.IsValid (virtPage) || !currentThread.myProcess.addrSpace.IsWritable (virtPage)
+	   print ("Error while reading file")
+	   return -1
+	endIf
+
+	-- Do the write
+	currentThread.myProcess.addrSpace.SetReferenced (virtPage)
+	destAddr = currentThread.myProcess.addrSpace.ExtractFrameAddr (virtPage) + offset
+	chunkSize = PAGE_SIZE - offset
+
+	while chunkSize > 0 && sizeInBytes > 0
+	  outChar = (*(destAddr asPtrTo char))
+	  copiedSoFar = copiedSoFar + 1
+	  if outChar == '\n'
+		serialDriver.PutChar('\r')
+	  endIf
+	  serialDriver.PutChar (outChar)
+	  sizeInBytes = sizeInBytes - 1
+	  chunkSize = chunkSize - 1
+	  destAddr = destAddr + 1
+	endWhile
+
+	-- Increment
+	virtPage = virtPage + 1
+	offset = 0
+
+	if sizeInBytes == 0
+	  return copiedSoFar
+	endIf
+
+	endWhile
+
 	endIf
 	if currentThread.myProcess.fileDescriptor[fileDesc].fcb == null
 	  print ("Invalid file descriptor as file not open")
@@ -2188,8 +2280,9 @@ endFunction
       -- NOT IMPLEMENTED
 	var fp: ptr to OpenFile
 	    N: int
-	if fileDesc >= 0 && fileDesc <= MAX_FILES_PER_PROCESS - 1 && currentThread.myProcess.fileDescriptor[fileDesc] == fileManager.serialTerminalFile
+	if fileDesc >= 0 && fileDesc <= MAX_FILES_PER_PROCESS - 1 && currentThread.myProcess.fileDescriptor[fileDesc].kind == TERMINAL
 	  currentThread.myProcess.fileDescriptor[fileDesc] = null
+	  return
 	endIf
 	if fileDesc < 0 || fileDesc > MAX_FILES_PER_PROCESS - 1 || currentThread.myProcess.fileDescriptor[fileDesc] == null || currentThread.myProcess.fileDescriptor[fileDesc].fcb == null
 	  print ("Invalid file descriptor [From Handle_Sys_CLose]")
@@ -3088,7 +3181,7 @@ var pcb: ptr to ProcessControlBlock
 	pcb = processManager.GetANewProcess ()
 	pcb.myThread = currentThread
 	currentThread.myProcess = pcb
-	fp = fileManager.Open ("TestProgram4")
+	fp = fileManager.Open ("TestProgram5")
 	if fp
 	  initPC = fp.LoadExecutable (&(pcb.addrSpace))
 	  fileManager.Close (fp)
@@ -3117,8 +3210,8 @@ method Init ()
 
 	print ("Initializing SerialDriver...")
 	nl ()
-	serial_status_word_address = SERIAL_STATUS_WORD_ADDRESS
-	serial_data_word_address = SERIAL_DATA_WORD_ADDRESS
+	serial_status_word_address = SERIAL_STATUS_WORD_ADDRESS asPtrTo int
+	serial_data_word_address = SERIAL_DATA_WORD_ADDRESS asPtrTo int
 	getBufferSize = 0
 	putBufferSize = 0
 	getBufferNextIn = 0
@@ -3133,10 +3226,11 @@ method Init ()
 	putBuffer = new array of char {SERIAL_PUT_BUFFER_SIZE of '\0'}
 	putBufferSem = new Semaphore
 	putBufferSem.Init (SERIAL_PUT_BUFFER_SIZE)
-	SerialNeedsAttention = new Semaphore
-	SerialNeedsAttention.Init (0)
-	serialHandlerThread = new Thread
+	serialNeedsAttention = new Semaphore
+	serialNeedsAttention.Init (1)
+	serialHandlerThread = *threadManager.GetANewThread ()
 	serialHandlerThread.Init ("SerialHandlerThread")
+	serialHandlerThread.status = JUST_CREATED
 	serialHandlerThread.Fork (SerialHandlerFunction, 0)
 	serialHasBeenInitialized = true
 
@@ -3149,7 +3243,7 @@ method PutChar (value: char)
 	putBuffer[putBufferNextIn] = value
 	putBufferNextIn = (putBufferNextIn + 1) % SERIAL_PUT_BUFFER_SIZE
 	serialLock.Unlock ()
-	SerialNeedsAttention.Up ()
+	serialNeedsAttention.Up ()
 endMethod
 
 method GetChar () returns char
@@ -3167,11 +3261,15 @@ endMethod
 
 method SerialHandler ()
 	var inchar: char
+
+	while serialHasBeenInitialized == false
+	endWhile
+
 	while true
-	SerialNeedsAttention.Down ()
-	if (*serial_status_word_address) & SERIAL_CHARACTER_AVAILABLE_BIT == 1
+	serialNeedsAttention.Down ()
+	if ((*serial_status_word_address) & SERIAL_CHARACTER_AVAILABLE_BIT) > 0
 	  serialLock.Lock ()
-	  inchar = *serial_data_word_address
+	  inchar = intToChar (*serial_data_word_address)
 	  if getBufferSize >= SERIAL_GET_BUFFER_SIZE
 	    print ("\nSerial input buffer overrun - character '")
 	    printChar (inchar)
@@ -3184,11 +3282,11 @@ method SerialHandler ()
 	  endIf
 	  serialLock.Unlock ()
 	endIf
-	if (*serial_status_word_address) & SERIAL_OUTPUT_READY_BIT == 1
+	if ((*serial_status_word_address) & SERIAL_OUTPUT_READY_BIT) > 0
 	  serialLock.Lock ()
 	  if putBufferSize > 0
-	    (*serial_data_word_address) = putBuffer [putBufferNextOut]
-	    putBufferNextOut = putBufferNextOut + 1
+	    (*serial_data_word_address) = charToInt (putBuffer [putBufferNextOut])
+	    putBufferNextOut = (putBufferNextOut + 1) % SERIAL_PUT_BUFFER_SIZE
 	    putBufferSize = putBufferSize - 1
 	    putBufferSem.Up ()
 	  endIf

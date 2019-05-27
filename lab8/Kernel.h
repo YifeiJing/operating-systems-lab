@@ -62,7 +62,7 @@ header Kernel
     diskDriver: DiskDriver
     serialDriver: SerialDriver
     fileManager: FileManager
-    serialHasBeenInitialed: bool
+    serialHasBeenInitialized: bool
 
   functions
 
@@ -410,7 +410,7 @@ header Kernel
 	putBufferNextIn: int
 	putBufferNextOut: int
 	putBufferSem: Semaphore
-	SerialNeedsAttention: Semaphore
+	serialNeedsAttention: Semaphore
 	serialHandlerThread: Thread
     methods
 	Init ()
